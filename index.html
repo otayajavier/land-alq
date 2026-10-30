@@ -180,6 +180,11 @@ input[type=text]{width:100%;font-family:inherit;font-size:18px;padding:14px 16px
 .toggle.on{background:var(--navy);color:#fff;border-color:var(--navy)}
 .opt{font-weight:400;color:var(--muted);font-size:14.5px}
 
+.req{color:var(--orange-ink)}
+.err{color:#B3261E;font-size:14.5px;font-weight:500;margin-top:6px}
+.err[hidden]{display:none}
+input[aria-invalid="true"]{border-color:#B3261E}
+
 /* ---------- FAQ ---------- */
 .faq{border-top:1px solid var(--border);margin-top:32px}
 .faq details{border-bottom:1px solid var(--border)}
@@ -491,12 +496,14 @@ input[type=text]{width:100%;font-family:inherit;font-size:18px;padding:14px 16px
 
     <div style="flex:1 1 400px;min-width:0;background:#fff;color:var(--ink);border-radius:24px;padding:32px;display:flex;flex-direction:column;gap:20px">
       <div>
-        <label for="nombre" style="display:block;font-weight:700;margin-bottom:8px">Tu nombre</label>
-        <input id="nombre" type="text" placeholder="Ej: María Gómez" autocomplete="name">
+        <label for="nombre" style="display:block;font-weight:700;margin-bottom:8px">Tu nombre <span class="req" aria-hidden="true">*</span></label>
+        <input id="nombre" type="text" placeholder="Ej: María Gómez" autocomplete="name" aria-required="true" aria-describedby="err-nombre">
+        <p class="err" id="err-nombre" role="alert" hidden>Escribe tu nombre para que sepa cómo llamarte.</p>
       </div>
       <div>
-        <label for="telefono" style="display:block;font-weight:700;margin-bottom:8px">Tu número de contacto</label>
-        <input id="telefono" type="text" inputmode="tel" placeholder="Ej: 300 123 4567" autocomplete="tel">
+        <label for="telefono" style="display:block;font-weight:700;margin-bottom:8px">Tu número de contacto <span class="req" aria-hidden="true">*</span></label>
+        <input id="telefono" type="text" inputmode="tel" placeholder="Ej: 300 123 4567" autocomplete="tel" aria-required="true" aria-describedby="err-telefono">
+        <p class="err" id="err-telefono" role="alert" hidden>Escribe un número de contacto válido (mínimo 10 dígitos).</p>
       </div>
       <div>
         <div style="font-weight:700;margin-bottom:8px" id="lblServicio">¿Qué producto te interesa?</div>
@@ -507,8 +514,9 @@ input[type=text]{width:100%;font-family:inherit;font-size:18px;padding:14px 16px
         <div id="tipoGroup" role="group" aria-labelledby="lblTipo" style="display:flex;flex-wrap:wrap;gap:10px"></div>
       </div>
       <div>
-        <label for="zona" style="display:block;font-weight:700;margin-bottom:8px">Barrio o sector</label>
-        <input id="zona" type="text" placeholder="Ej: Ciudad Jardín, Pance, San Fernando">
+        <label for="zona" style="display:block;font-weight:700;margin-bottom:8px">Barrio o sector <span class="req" aria-hidden="true">*</span></label>
+        <input id="zona" type="text" placeholder="Ej: Ciudad Jardín, Pance, San Fernando" aria-required="true" aria-describedby="err-zona">
+        <p class="err" id="err-zona" role="alert" hidden>Cuéntame en qué barrio o sector está tu inmueble.</p>
       </div>
       <div>
         <label for="canon" style="display:block;font-weight:700;margin-bottom:8px">Canon mensual que esperas <span class="opt">(opcional)</span></label>
@@ -517,7 +525,7 @@ input[type=text]{width:100%;font-family:inherit;font-size:18px;padding:14px 16px
       <a id="waBtn" class="btn btn-orange" href="#" target="_blank" rel="noopener" style="font-size:18px">Enviar por WhatsApp
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
       </a>
-      <p style="font-size:14px;color:var(--muted);text-align:center">Se abre WhatsApp con tu mensaje listo para enviar.</p>
+      <p style="font-size:14px;color:var(--muted);text-align:center">Los campos con <span class="req" aria-hidden="true">*</span> son obligatorios. Se abre WhatsApp con tu mensaje listo para enviar.</p>
     </div>
   </div>
 </section>
@@ -718,7 +726,34 @@ function enviarLeadASheets(leadId) {
 // La calificación real ("QualifiedLead") la manda el Apps Script desde la
 // hoja, cuando cambias el Estado de la fila a "Calificado".
 // -----------------------------------------------------------------
-waBtn.addEventListener('click', function () {
+function validarFormulario() {
+  const reglas = [
+    [nombreInput, 'err-nombre', nombreInput.value.trim().length >= 2],
+    [telefonoInput, 'err-telefono', onlyDigits(telefonoInput.value).length >= 10],
+    [zonaInput, 'err-zona', zonaInput.value.trim().length >= 2],
+  ];
+  let primero = null;
+  reglas.forEach(([input, errId, ok]) => {
+    document.getElementById(errId).hidden = ok;
+    input.setAttribute('aria-invalid', ok ? 'false' : 'true');
+    if (!ok && !primero) primero = input;
+  });
+  if (primero) primero.focus();
+  return !primero;
+}
+// Al corregir un campo, se limpia su error
+[[nombreInput, 'err-nombre'], [telefonoInput, 'err-telefono'], [zonaInput, 'err-zona']].forEach(([input, errId]) => {
+  input.addEventListener('input', () => {
+    if (input.getAttribute('aria-invalid') === 'true') {
+      document.getElementById(errId).hidden = true;
+      input.setAttribute('aria-invalid', 'false');
+    }
+  });
+});
+
+waBtn.addEventListener('click', function (e) {
+  // Sin datos obligatorios no se abre WhatsApp, no se registra el lead ni se dispara el Pixel
+  if (!validarFormulario()) { e.preventDefault(); return; }
   const leadId = 'lead_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
   if (window.fbq) {
     fbq('track', 'Lead', {
